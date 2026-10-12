@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palindrome Checker | Double-Ended Queue (collections.deque)</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-badge">
+                <span class="badge-dot"></span>
+                <span>Python Flask &bull; collections.deque</span>
+            </div>
+            <h1 class="header-title">
+                Palindrome <span class="gradient-text">Checker</span>
+            </h1>
+            <p class="header-subtitle">
+                High-performance palindrome verification leveraging Python's <code>collections.deque</code> 
+                with <span class="highlight">O(1)</span> double-ended character comparison.
+            </p>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="main-content">
+            <!-- Left Column: Input and Controls -->
+            <section class="card input-card">
+                <div class="card-header">
+                    <h2><span class="icon">🔍</span> Test Input</h2>
+                    <span class="card-hint">Supports words, phrases &amp; numbers</span>
+                </div>
+
+                <form id="palindromeForm" action="/" method="POST">
+                    <div class="input-group">
+                        <label for="inputText" class="form-label">Enter text to evaluate:</label>
+                        <div class="textarea-wrapper">
+                            <textarea 
+                                id="inputText" 
+                                name="text" 
+                                rows="3" 
+                                placeholder="Type or click a sample below (e.g. 'A man, a plan, a canal: Panama')"
+                                required
+                            >{{ input_text if input_text is defined else '' }}</textarea>
+                            <button type="button" id="clearBtn" class="clear-input-btn" title="Clear text">&times;</button>
+                        </div>
+                    </div>
+
+                    <!-- Preset Samples -->
+                    <div class="samples-wrapper">
+                        <span class="samples-label">Quick Samples:</span>
+                        <div class="samples-list">
+                            <button type="button" class="sample-chip" data-sample="Racecar">Racecar</button>
+                            <button type="button" class="sample-chip" data-sample="A man, a plan, a canal: Panama!">Panama Canal</button>
+                            <button type="button" class="sample-chip" data-sample="Was it a car or a cat I saw?">Car or a Cat</button>
+                            <button type="button" class="sample-chip" data-sample="Madam, I'm Adam">Madam Adam</button>
+                            <button type="button" class="sample-chip" data-sample="123454321">123454321</button>
+                            <button type="button" class="sample-chip non-pal" data-sample="Hello World">Hello World (No)</button>
+                        </div>
+                    </div>
+
+                    <!-- Configuration Options -->
+                    <div class="options-container">
+                        <span class="options-title">Preprocessing Flags</span>
+                        <div class="options-grid">
+                            <label class="toggle-option">
+                                <input type="checkbox" name="ignore_case" id="optCase" {% if ignore_case is not defined or ignore_case %}checked{% endif %}>
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">
+                                    <strong>Ignore Casing</strong>
+                                    <small>'A' == 'a'</small>
+                                </span>
+                            </label>
+
+                            <label class="toggle-option">
+                                <input type="checkbox" name="ignore_spaces" id="optSpaces" {% if ignore_spaces is not defined or ignore_spaces %}checked{% endif %}>
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">
+                                    <strong>Ignore Spaces</strong>
+                                    <small>Strip whitespace</small>
+                                </span>
+                            </label>
+
+                            <label class="toggle-option">
+                                <input type="checkbox" name="ignore_punctuation" id="optPunct" {% if ignore_punctuation is not defined or ignore_punctuation %}checked{% endif %}>
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">
+                                    <strong>Ignore Punctuation</strong>
+                                    <small>Strip ! ? , . - ' :</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="form-actions">
+                        <button type="submit" id="checkBtn" class="btn btn-primary">
+                            <span class="btn-icon">⚡</span> Check Palindrome
+                        </button>
+                        <button type="reset" id="resetBtn" class="btn btn-secondary">
+                            Reset All
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right Column: Verification Results & Deque Visualizer -->
+            <section class="card result-card" id="resultCard" {% if not result %}style="display: none;"{% endif %}>
+                <div class="card-header">
+                    <h2><span class="icon">📊</span> Deque Evaluation Result</h2>
+                    <span id="resultBadgeType" class="status-pill {% if result and result.is_palindrome %}pill-success{% elif result and not result.is_palindrome %}pill-danger{% endif %}">
+                        {% if result %}
+                            {% if result.is_palindrome %}PALINDROME{% else %}NOT PALINDROME{% endif %}
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div id="resultContent">
+                    {% if result %}
+                        <!-- Banner -->
+                        <div class="result-banner {% if result.is_palindrome %}banner-success{% else %}banner-danger{% endif %}" id="resultBanner">
+                            <div class="banner-icon" id="bannerIcon">
+                                {% if result.is_palindrome %}🎉{% else %}❌{% endif %}
+                            </div>
+                            <div class="banner-text">
+                                <h3 id="bannerTitle">
+                                    {% if result.is_palindrome %}
+                                        Yes! This is a valid palindrome.
+                                    {% else %}
+                                        No, this is not a palindrome.
+                                    {% endif %}
+                                </h3>
+                                <p id="bannerMessage">{{ result.message }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Stats Grid -->
+                        <div class="stats-grid">
+                            <div class="stat-box">
+                                <span class="stat-label">Raw Length</span>
+                                <span class="stat-value" id="statRawLen">{{ result.raw_text|length }}</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Cleaned Deque Size</span>
+                                <span class="stat-value" id="statCleanLen">{{ result.total_chars }}</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Deque Comparisons</span>
+                                <span class="stat-value" id="statSteps">{{ result.steps|length }}</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Center Pivot</span>
+                                <span class="stat-value pivot" id="statPivot">
+                                    {% if result.middle_char is not none %}'{{ result.middle_char }}'{% else %}None{% endif %}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Initial Deque State Visualizer -->
+                        <div class="deque-initial-box">
+                            <div class="section-subheading">
+                                <span>Initial Deque Representation</span>
+                                <span class="subheading-tag">Front &larr; &bull; &rarr; Rear</span>
+                            </div>
+                            <div class="deque-container" id="initialDequeContainer">
+                                <div class="deque-end-label front-label">&larr; Front (popleft)</div>
+                                <div class="deque-cells">
+                                    {% for ch in result.cleaned_text %}
+                                        <div class="deque-cell">{{ ch }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="deque-end-label rear-label">Rear (pop) &rarr;</div>
+                            </div>
+                        </div>
+
+                        <!-- Step-by-Step Execution Trace -->
+                        <div class="trace-section">
+                            <div class="section-subheading">
+                                <span>Step-by-Step Deque Comparison Trace</span>
+                                <span class="subheading-tag">popleft() vs pop()</span>
+                            </div>
+
+                            {% if result.steps %}
+                                <div class="table-responsive">
+                                    <table class="trace-table" id="traceTable">
+                                        <thead>
+                                            <tr>
+                                                <th>Step</th>
+                                                <th>popleft() (Front)</th>
+                                                <th>pop() (Rear)</th>
+                                                <th>Comparison</th>
+                                                <th>Remaining Deque</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for step in result.steps %}
+                                                <tr class="{% if step.matched %}row-match{% else %}row-mismatch{% endif %}">
+                                                    <td><span class="step-badge">#{{ step.step }}</span></td>
+                                                    <td><code class="char-chip">{{ step.front }}</code></td>
+                                                    <td><code class="char-chip">{{ step.rear }}</code></td>
+                                                    <td>
+                                                        {% if step.matched %}
+                                                            <span class="match-tag match-yes">&check; Match ('{{ step.front }}' == '{{ step.rear }}')</span>
+                                                        {% else %}
+                                                            <span class="match-tag match-no">&#10006; Mismatch ('{{ step.front }}' &ne; '{{ step.rear }}')</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <span class="remaining-str">
+                                                            {% if step.remaining_str %}
+                                                                <code>{{ step.remaining_str }}</code>
+                                                            {% else %}
+                                                                <em>(empty deque)</em>
+                                                            {% endif %}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% elif result.total_chars <= 1 %}
+                                <p class="empty-trace-note">
+                                    A string with {{ result.total_chars }} character is trivially a palindrome without needing two-ended comparisons.
+                                </p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+
+        <!-- Informational / Algorithmic Concept Section -->
+        <section class="card info-card">
+            <div class="card-header">
+                <h2><span class="icon">💡</span> How collections.deque Works for Palindromes</h2>
+            </div>
+            <div class="info-grid">
+                <div class="info-block">
+                    <h3>Why not standard Python lists?</h3>
+                    <p>
+                        In a standard Python list, <code>pop(0)</code> (removing the first element) takes 
+                        <strong>O(n)</strong> time because all subsequent elements must be shifted in memory.
+                    </p>
+                    <p>
+                        A <code>collections.deque</code> (Double-Ended Queue) is implemented as a doubly linked 
+                        list of blocks in C. Both <code>popleft()</code> and <code>pop()</code> execute in 
+                        <strong>O(1) constant time</strong>.
+                    </p>
+                </div>
+
+                <div class="info-block">
+                    <h3>Algorithm Workflow</h3>
+                    <ol class="algo-steps">
+                        <li><strong>Preprocess:</strong> Normalize text (case, whitespace, punctuation).</li>
+                        <li><strong>Load:</strong> Enqueue all filtered characters into <code>deque(chars)</code>.</li>
+                        <li><strong>Compare:</strong> While <code>len(deque) > 1</code>, simultaneously pop <code>front = popleft()</code> and <code>rear = pop()</code>.</li>
+                        <li><strong>Verify:</strong> If <code>front != rear</code>, terminate early with <em>False</em>. If the loop completes, return <em>True</em>.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Code snippet display -->
+            <div class="code-box">
+                <div class="code-header">
+                    <span>Python collections.deque Core Logic</span>
+                    <span class="lang-tag">Python 3</span>
+                </div>
+                <pre><code><span class="kw">from</span> collections <span class="kw">import</span> deque
+
+<span class="kw">def</span> <span class="fn">is_palindrome_deque</span>(cleaned_text: <span class="type">str</span>) -&gt; <span class="type">bool</span>:
+    char_deque = <span class="fn">deque</span>(cleaned_text)
+    <span class="kw">while</span> <span class="fn">len</span>(char_deque) &gt; <span class="num">1</span>:
+        front = char_deque.<span class="fn">popleft</span>()  <span class="comment"># O(1) from head</span>
+        rear = char_deque.<span class="fn">pop</span>()       <span class="comment"># O(1) from tail</span>
+        <span class="kw">if</span> front != rear:
+            <span class="kw">return</span> <span class="kw">False</span>
+    <span class="kw">return</span> <span class="kw">True</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Built with <strong>Python Flask</strong> &amp; <strong>collections.deque</strong></p>
+        </footer>
+    </div>
+
+    <!-- Interactive script for instantaneous AJAX updates & sample prefilling -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
