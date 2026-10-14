@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Palindrome Checker | Double-Ended Queue (collections.deque)</title>
+    <title>Palindrome Checker | Double-Ended Queue</title>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-
+    <!-- Embedded Dark Theme CSS -->
     <style>
         :root {
             --bg-primary: #0d1117;
@@ -21,6 +21,7 @@
             --accent-blue: #58a6ff;
             --accent-green: #238636;
             --accent-green-hover: #2ea043;
+            --code-bg: #1f242c;
         }
 
         body {
@@ -34,7 +35,7 @@
         }
 
         .app-wrapper {
-            max-width: 800px;
+            max-width: 850px;
             width: 100%;
         }
 
@@ -91,6 +92,7 @@
             border-radius: 12px;
             padding: 24px;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            margin-bottom: 25px;
         }
 
         .card-header {
@@ -161,6 +163,120 @@
         .clear-input-btn:hover {
             color: #ffffff;
         }
+
+        /* Quick Samples Styling */
+        .samples-section {
+            margin-top: 15px;
+        }
+
+        .samples-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .sample-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .sample-chip {
+            background-color: #21262d;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sample-chip:hover {
+            background-color: #30363d;
+            border-color: var(--accent-blue);
+            color: #ffffff;
+        }
+
+        /* Flags & Buttons */
+        .flags-container {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-main);
+            cursor: pointer;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-green);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-green-hover);
+        }
+
+        .btn-secondary {
+            background-color: #21262d;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background-color: #30363d;
+        }
+
+        /* Documentation & Workflow Info */
+        .info-section h3 {
+            font-size: 16px;
+            color: #ffffff;
+            margin-top: 0;
+        }
+
+        .info-section p, .info-section li {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .code-box {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            color: #7ee787;
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body>
@@ -178,6 +294,7 @@
         </header>
 
         <main class="main-content">
+            <!-- Test Input Card -->
             <section class="card input-card">
                 <div class="card-header">
                     <h2><span>🔍</span> Test Input</h2>
@@ -198,17 +315,86 @@
                             <button type="button" id="clearBtn" class="clear-input-btn" title="clear text">&times;</button>
                         </div>
                     </div>
+
+                    <!-- Quick Samples -->
+                    <div class="samples-section">
+                        <span class="samples-label">Quick Samples:</span>
+                        <div class="sample-chips">
+                            <button type="button" class="sample-chip" onclick="setSample('Racecar')">Racecar</button>
+                            <button type="button" class="sample-chip" onclick="setSample('Panama Canal')">Panama Canal</button>
+                            <button type="button" class="sample-chip" onclick="setSample('Car or a Cat')">Car or a Cat</button>
+                            <button type="button" class="sample-chip" onclick="setSample('Madam Adam')">Madam Adam</button>
+                            <button type="button" class="sample-chip" onclick="setSample('123454321')">123454321</button>
+                            <button type="button" class="sample-chip" onclick="setSample('Hello World (No)')">Hello World (No)</button>
+                        </div>
+                    </div>
+
+                    <!-- Preprocessing Flags -->
+                    <div class="flags-container">
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked> Ignore Casing 'A' == 'a'
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked> Ignore Spaces
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked> Ignore Punctuation
+                        </label>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button type="submit" class="btn-primary">⚡ Check Palindrome</button>
+                        <button type="button" class="btn-secondary" onclick="resetForm()">Reset All</button>
+                    </div>
                 </form>
+            </section>
+
+            <!-- Workflow & Documentation Section -->
+            <section class="card info-section">
+                <h2>💡 How collections.deque Works for Palindromes</h2>
+                <h3>Why not standard Python lists?</h3>
+                <p>In a standard Python list, <code>pop(0)</code> (removing the first element) takes <strong>O(n)</strong> time because all subsequent elements must be shifted in memory.</p>
+                <p>A <code>collections.deque</code> (Double-Ended Queue) is implemented as a doubly linked list of blocks in C. Both <code>popleft()</code> and <code>pop()</code> execute in <strong>O(1)</strong> constant time.</p>
+                
+                <h3>Algorithm Workflow</h3>
+                <ol>
+                    <li><strong>Preprocess:</strong> Normalize text (case, whitespace, punctuation).</li>
+                    <li><strong>Load:</strong> Enqueue all filtered characters into deque(chars).</li>
+                    <li><strong>Compare:</strong> While <code>len(deque) > 1</code>, simultaneously pop front = popleft() and rear = pop().</li>
+                    <li><strong>Verify:</strong> If front != rear, terminate early with <em>False</em>. If the loop completes, return <em>True</em>.</li>
+                </ol>
+
+                <h3>Python collections.deque Core Logic</h3>
+                <div class="code-box">
+from collections.deque import deque
+
+def is_palindrome_deque(cleaned_text: str) -> bool:
+    char_deque = deque(cleaned_text)
+    while len(char_deque) > 1:
+        front = char_deque.popleft()  # O(1) from head
+        rear = char_deque.pop()       # O(1) from tail
+        if front != rear:
+            return False
+    return True
+                </div>
             </section>
         </main>
     </div>
 
-    <!-- Embedded JavaScript (जावास्क्रिप्ट यहाँ है) -->
+    <!-- JavaScript for Interactive Samples & Clear -->
     <script>
         document.getElementById('clearBtn').addEventListener('click', function() {
             document.getElementById('inputText').value = '';
             document.getElementById('inputText').focus();
         });
+
+        function setSample(text) {
+            document.getElementById('inputText').value = text;
+        }
+
+        function resetForm() {
+            document.getElementById('inputText').value = '';
+        }
     </script>
 </body>
 </html>
