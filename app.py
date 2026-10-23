@@ -6,7 +6,7 @@ Main Application Server (Flask REST API & Dashboard Host)
 import os
 import json
 import time
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 from core.models import UserRole, IoTTelemetry, ActionRecommendation
 from core.gemini_client import GeminiClient
 from core.security import SecurityEngine
@@ -24,6 +24,43 @@ orchestrator = MultiAgentOrchestrator(gemini_client=gemini_client)
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/download")
+@app.route("/api/download")
+def download_project_zip():
+    """
+    Allows user to directly download the complete self-contained project ZIP package.
+    Supports on-disk cached archive and on-the-fly dynamic packaging for serverless (Vercel) environments.
+    """
+    import io
+    import zipfile
+
+    zip_path = os.path.join(os.path.dirname(__file__), "EcoLogix_AI_System.zip")
+    if os.path.exists(zip_path):
+        return send_file(zip_path, as_attachment=True, download_name="EcoLogix_AI_System.zip")
+
+    # Dynamic in-memory packaging for serverless deployment
+    mem_buf = io.BytesIO()
+    base_dir = os.path.dirname(__file__)
+    with zipfile.ZipFile(mem_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for folder in ["core", "agents", "analytics", "database", "static", "templates", "tests"]:
+            fpath = os.path.join(base_dir, folder)
+            if os.path.exists(fpath):
+                for root, _, files in os.walk(fpath):
+                    if "__pycache__" in root:
+                        continue
+                    for file in files:
+                        full_p = os.path.join(root, file)
+                        rel_p = os.path.relpath(full_p, base_dir)
+                        zf.write(full_p, rel_p)
+        for fname in ["app.py", "README.md", "requirements.txt", "vercel.json"]:
+            full_p = os.path.join(base_dir, fname)
+            if os.path.exists(full_p):
+                zf.write(full_p, fname)
+
+    mem_buf.seek(0)
+    return send_file(mem_buf, mimetype="application/zip", as_attachment=True, download_name="EcoLogix_AI_System.zip")
 
 
 # ==========================================
