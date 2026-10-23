@@ -1,191 +1,279 @@
 """
-Palindrome Checker Web Application
-Powered by Python Flask and collections.deque (Double-Ended Queue)
+EcoLogix AI - Autonomous Agentic Cold-Chain Food Rescue & Spoilage Prevention System
+Main Application Server (Flask REST API & Dashboard Host)
 """
 
+import os
+import json
+import time
 from flask import Flask, render_template, request, jsonify
-from collections import deque
-import re
-import string
+from core.models import UserRole, IoTTelemetry, ActionRecommendation
+from core.gemini_client import GeminiClient
+from core.security import SecurityEngine
+from database.db import db_instance
+from agents.orchestrator import MultiAgentOrchestrator
+from analytics.bigquery_engine import BigQueryAnalyticsEngine, BIGQUERY_SCHEMA_DDL, ANALYTICAL_ESG_QUERY
 
 app = Flask(__name__)
 
-
-def check_palindrome_deque(raw_text: str, ignore_case: bool = True, 
-                           ignore_spaces: bool = True, ignore_punctuation: bool = True):
-    """
-    Checks whether a given string is a palindrome using a Double-Ended Queue (deque).
-    
-    Why collections.deque?
-    In Python, collections.deque provides O(1) time complexity for popping from both ends 
-    (popleft() and pop()), whereas a standard Python list takes O(n) for pop(0) due to 
-    element shifting. This makes deque the ideal data structure for two-pointer / two-ended 
-    verification algorithms.
-    """
-    if raw_text is None:
-        raw_text = ""
-
-    # Process and clean the text according to selected options
-    cleaned_chars = []
-    for char in raw_text:
-        # Check punctuation
-        if ignore_punctuation and (char in string.punctuation or char in "“”‘’—–…"):
-            continue
-        # Check whitespace
-        if ignore_spaces and char.isspace():
-            continue
-        # Casing
-        if ignore_case:
-            char = char.lower()
-        cleaned_chars.append(char)
-
-    cleaned_text = "".join(cleaned_chars)
-
-    if not cleaned_text:
-        return {
-            "is_empty": True,
-            "raw_text": raw_text,
-            "cleaned_text": "",
-            "is_palindrome": False,
-            "message": "Input contains no evaluable characters under the current filter settings.",
-            "steps": [],
-            "total_chars": 0,
-            "middle_char": None,
-            "options": {
-                "ignore_case": ignore_case,
-                "ignore_spaces": ignore_spaces,
-                "ignore_punctuation": ignore_punctuation
-            }
-        }
-
-    # Initialize double-ended queue
-    char_deque = deque(cleaned_chars)
-    initial_deque_state = list(char_deque)
-
-    steps = []
-    is_palindrome = True
-    step_num = 1
-
-    # Compare characters by popping simultaneously from front and rear
-    while len(char_deque) > 1:
-        front_char = char_deque.popleft()
-        rear_char = char_deque.pop()
-        matched = (front_char == rear_char)
-
-        steps.append({
-            "step": step_num,
-            "front": front_char,
-            "rear": rear_char,
-            "matched": matched,
-            "remaining_deque": list(char_deque),
-            "remaining_str": "".join(char_deque)
-        })
-
-        if not matched:
-            is_palindrome = False
-            break
-
-        step_num += 1
-
-    # If length was odd and it is a palindrome, the middle character remains in deque
-    middle_char = char_deque[0] if (len(char_deque) == 1 and is_palindrome) else None
-
-    return {
-        "is_empty": False,
-        "raw_text": raw_text,
-        "cleaned_text": cleaned_text,
-        "initial_deque": initial_deque_state,
-        "is_palindrome": is_palindrome,
-        "message": "Congratulations! It's a valid palindrome." if is_palindrome else "Not a palindrome. Characters did not match.",
-        "steps": steps,
-        "total_chars": len(cleaned_text),
-        "middle_char": middle_char,
-        "options": {
-            "ignore_case": ignore_case,
-            "ignore_spaces": ignore_spaces,
-            "ignore_punctuation": ignore_punctuation
-        }
-    }
+# Initialize singletons
+gemini_client = GeminiClient()
+orchestrator = MultiAgentOrchestrator(gemini_client=gemini_client)
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
-    result = None
-    input_text = ""
-    ignore_case = True
-    ignore_spaces = True
-    ignore_punctuation = True
+    return render_template("index.html")
 
-    if request.method == "POST":
-        input_text = request.form.get("text", "")
-        ignore_case = "ignore_case" in request.form
-        ignore_spaces = "ignore_spaces" in request.form
-        ignore_punctuation = "ignore_punctuation" in request.form
 
-        if input_text.strip():
-            result = check_palindrome_deque(
-                input_text,
-                ignore_case=ignore_case,
-                ignore_spaces=ignore_spaces,
-                ignore_punctuation=ignore_punctuation
-            )
-        else:
-            result = {
-                "is_empty": True,
-                "raw_text": "",
-                "cleaned_text": "",
-                "is_palindrome": False,
-                "message": "Please enter a word or sentence to check.",
-                "steps": [],
-                "total_chars": 0,
-                "middle_char": None,
-                "options": {
-                    "ignore_case": ignore_case,
-                    "ignore_spaces": ignore_spaces,
-                    "ignore_punctuation": ignore_punctuation
-                }
-            }
+# ==========================================
+# BATCH & INVENTORY ENDPOINTS
+# ==========================================
 
-    return render_template(
-        "index.html",
-        result=result,
-        input_text=input_text,
-        ignore_case=ignore_case,
-        ignore_spaces=ignore_spaces,
-        ignore_punctuation=ignore_punctuation
+@app.route("/api/batches", methods=["GET"])
+def get_batches():
+    batches = db_instance.get_all_batches()
+    return jsonify([b.model_dump() for b in batches])
+
+
+@app.route("/api/batches/<batch_id>", methods=["GET"])
+def get_batch(batch_id):
+    batch = db_instance.get_batch(batch_id)
+    if not batch:
+        return jsonify({"error": "Batch not found"}), 404
+    return jsonify(batch.model_dump())
+
+
+@app.route("/api/batches/<batch_id>/simulate", methods=["POST"])
+def simulate_sensor_tick(batch_id):
+    """
+    Simulates real-world sensor fluctuations: temperature spike, cooling recovery, or door open.
+    """
+    data = request.get_json() or {}
+    temp_delta = float(data.get("temp_delta_c", 0.0))
+    duration_min = float(data.get("duration_min", 15.0))
+
+    updated_batch = db_instance.simulate_telemetry_tick(batch_id, temp_delta, duration_min)
+    if not updated_batch:
+        return jsonify({"error": "Batch not found"}), 404
+
+    orchestrator.record_audit_log(
+        actor_id="IOT_GATEWAY_SIMULATOR",
+        actor_role=UserRole.SYSTEM_AGENT,
+        action_type="TELEMETRY_SPIKE_SIMULATED",
+        batch_id=batch_id,
+        details={
+            "temp_delta_c": temp_delta,
+            "duration_min": duration_min,
+            "new_temp": updated_batch.telemetry_history[-1].temperature_c,
+            "new_status": updated_batch.safety_status.value,
+            "danger_zone_minutes": updated_batch.danger_zone_minutes,
+        },
     )
 
+    return jsonify(updated_batch.model_dump())
 
-@app.route("/api/check", methods=["POST"])
-def api_check():
+
+@app.route("/api/batches/reset", methods=["POST"])
+def reset_batches():
     """
-    JSON API endpoint for real-time / AJAX palindrome verification.
+    Resets all inventory batches and recipient hubs to original seed state.
     """
-    data = request.get_json(silent=True) or request.form
+    db_instance.initialize_seed_data()
+    orchestrator.active_plans.clear()
+    orchestrator.pending_hitl_plans.clear()
+    orchestrator.record_audit_log(
+        actor_id="SYSTEM_OPERATOR",
+        actor_role=UserRole.SYSTEM_AGENT,
+        action_type="DATABASE_RESET",
+        batch_id=None,
+        details={"status": "All scenario data reloaded to baseline."},
+    )
+    return jsonify({"status": "Database successfully reset to seed state."})
 
-    raw_text = data.get("text", "")
-    ignore_case = data.get("ignore_case", True)
-    ignore_spaces = data.get("ignore_spaces", True)
-    ignore_punctuation = data.get("ignore_punctuation", True)
 
-    # Cast boolean strings from JSON or form if needed
-    if isinstance(ignore_case, str):
-        ignore_case = ignore_case.lower() in ("true", "1", "on", "yes")
-    if isinstance(ignore_spaces, str):
-        ignore_spaces = ignore_spaces.lower() in ("true", "1", "on", "yes")
-    if isinstance(ignore_punctuation, str):
-        ignore_punctuation = ignore_punctuation.lower() in ("true", "1", "on", "yes")
+# ==========================================
+# MULTI-AGENT ORCHESTRATION PIPELINE
+# ==========================================
 
-    result = check_palindrome_deque(
-        raw_text,
-        ignore_case=bool(ignore_case),
-        ignore_spaces=bool(ignore_spaces),
-        ignore_punctuation=bool(ignore_punctuation)
+@app.route("/api/pipeline/run/<batch_id>", methods=["POST"])
+def run_pipeline(batch_id):
+    """
+    Triggers the end-to-end multi-agent execution pipeline for a specific batch.
+    """
+    batch = db_instance.get_batch(batch_id)
+    if not batch:
+        return jsonify({"error": "Batch not found"}), 404
+
+    hubs = db_instance.get_all_hubs()
+    trace = orchestrator.run_pipeline_for_batch(batch=batch, candidate_hubs=hubs)
+    return jsonify(trace)
+
+
+@app.route("/api/pipeline/run-all", methods=["POST"])
+def run_all_batches():
+    """
+    Triggers autonomous triage across all active inventory batches.
+    """
+    batches = db_instance.get_all_batches()
+    hubs = db_instance.get_all_hubs()
+    all_traces = []
+
+    for b in batches:
+        trace = orchestrator.run_pipeline_for_batch(batch=b, candidate_hubs=hubs)
+        all_traces.append(trace)
+
+    return jsonify({"traces": all_traces, "total_triaged": len(all_traces)})
+
+
+# ==========================================
+# ALLOCATION PLANS & HITL APPROVALS
+# ==========================================
+
+@app.route("/api/plans", methods=["GET"])
+def get_plans():
+    plans = list(orchestrator.active_plans.values())
+    return jsonify([p.model_dump() for p in plans])
+
+
+@app.route("/api/plans/<plan_id>/approve", methods=["POST"])
+def approve_plan(plan_id):
+    """
+    Human-in-the-Loop (HITL) authorization by a certified Food Safety Officer.
+    """
+    data = request.get_json() or {}
+    approver_name = data.get("approver_name", "Dr. Jane Reynolds, Food Safety Officer")
+    role_str = data.get("role", UserRole.FOOD_SAFETY_OFFICER.value)
+
+    try:
+        role = UserRole(role_str)
+    except ValueError:
+        role = UserRole.FOOD_SAFETY_OFFICER
+
+    success, plan, msg = orchestrator.approve_hitl_plan(plan_id, approver_name, role)
+    if not success:
+        return jsonify({"error": msg}), 403
+
+    return jsonify({"status": msg, "plan": plan.model_dump()})
+
+
+@app.route("/api/plans/<plan_id>/reject", methods=["POST"])
+def reject_plan(plan_id):
+    """
+    Human rejection of a proposed allocation.
+    """
+    data = request.get_json() or {}
+    officer_name = data.get("approver_name", "Dr. Jane Reynolds, Food Safety Officer")
+    reason = data.get("reason", "Rejected due to secondary risk assessment.")
+
+    plan = orchestrator.active_plans.get(plan_id)
+    if not plan:
+        return jsonify({"error": "Plan not found"}), 404
+
+    plan.recommended_action = ActionRecommendation.ANAEROBIC_DIGESTION_BIOGAS
+    plan.ai_reasoning += f" [HUMAN OFFICER REJECTION: {reason}]"
+    plan.hitl_approved = False
+    plan.meals_provided = 0
+
+    if plan_id in orchestrator.pending_hitl_plans:
+        del orchestrator.pending_hitl_plans[plan_id]
+
+    orchestrator.record_audit_log(
+        actor_id=officer_name,
+        actor_role=UserRole.FOOD_SAFETY_OFFICER,
+        action_type="HITL_DISPATCH_REJECTED",
+        batch_id=plan.batch_id,
+        details={"plan_id": plan_id, "rejection_reason": reason},
     )
 
-    return jsonify(result)
+    return jsonify({"status": "Plan successfully rejected and diverted to biogas.", "plan": plan.model_dump()})
+
+
+# ==========================================
+# CRYPTOGRAPHIC AUDIT LEDGER & SECURITY
+# ==========================================
+
+@app.route("/api/audit-ledger", methods=["GET"])
+def get_audit_ledger():
+    return jsonify(orchestrator.audit_ledger)
+
+
+@app.route("/api/audit-ledger/verify", methods=["GET"])
+def verify_audit_ledger():
+    """
+    Cryptographically verifies the entire SHA-256 block sequence for zero-tampering.
+    """
+    is_valid, error_msg = SecurityEngine.verify_ledger_integrity(orchestrator.audit_ledger)
+    return jsonify({
+        "integrity_intact": is_valid,
+        "total_blocks": len(orchestrator.audit_ledger),
+        "latest_hash": orchestrator.get_latest_hash(),
+        "error": error_msg,
+    })
+
+
+# ==========================================
+# GOOGLE CLOUD BIGQUERY & ESG ANALYTICS
+# ==========================================
+
+@app.route("/api/analytics/esg", methods=["GET"])
+def get_esg_analytics():
+    plans = list(orchestrator.active_plans.values())
+    esg_summary = BigQueryAnalyticsEngine.aggregate_esg_impact(plans)
+    return jsonify(esg_summary)
+
+
+@app.route("/api/bigquery/export", methods=["GET"])
+def export_bigquery():
+    """
+    Returns BigQuery streaming buffer rows and standard DDL & SQL analytics queries.
+    """
+    plans = list(orchestrator.active_plans.values())
+    rows = [BigQueryAnalyticsEngine.format_plan_for_bigquery(p) for p in plans]
+    return jsonify({
+        "project_id": "google-cloud-ecologix-prod",
+        "dataset": "ecologix_enterprise_dw",
+        "total_rows_buffered": len(rows),
+        "streaming_rows": rows,
+        "bigquery_ddl": BIGQUERY_SCHEMA_DDL,
+        "analytical_sql": ANALYTICAL_ESG_QUERY,
+    })
+
+
+# ==========================================
+# CONFIGURATION & GEMINI API KEY
+# ==========================================
+
+@app.route("/api/config/status", methods=["GET"])
+def get_config_status():
+    is_live = gemini_client.is_live_configured()
+    return jsonify({
+        "live_gemini_active": is_live,
+        "model": gemini_client.model,
+        "engine_mode": f"Live Google Gemini API ({gemini_client.model})" if is_live else "EcoLogix Cognitive Engine (Zero-Config Offline Fallback)",
+        "api_key_set": bool(gemini_client.api_key),
+    })
+
+
+@app.route("/api/config/gemini-key", methods=["POST"])
+def set_gemini_key():
+    data = request.get_json() or {}
+    key = data.get("api_key", "").strip()
+    if not key:
+        return jsonify({"error": "Key cannot be empty"}), 400
+
+    gemini_client.set_api_key(key)
+    return jsonify({
+        "status": "API key updated successfully.",
+        "live_gemini_active": gemini_client.is_live_configured(),
+        "engine_mode": "Live Google Gemini API" if gemini_client.is_live_configured() else "EcoLogix Cognitive Engine",
+    })
 
 
 if __name__ == "__main__":
-    print("Starting Palindrome Checker Flask App on http://127.0.0.1:5000")
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    print("=" * 70)
+    print("  EcoLogix AI - Autonomous Agentic Cold-Chain Food Rescue System")
+    print("  Powering Sustainable Logistics, HACCP Safety & BigQuery ESG Analytics")
+    print("  Google Cloud & Gemini Agentic System")
+    print("=" * 70)
+    app.run(host="127.0.0.1", port=5000, debug=True)
